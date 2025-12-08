@@ -64,7 +64,7 @@
     <img src="bag.jpg" width="200" alt="Bag"/>
     <ul>
     <li><a href="https://hushladies.com.ua/product/sumka-modena/" target="_blank">Сумка Модена в шоколадном цвете</a></li>
-    <li><a href="https://www.leman.in.ua/sumki/klatch-baget-zamshevii-shokoladnii-leman-lm4714-2.html" target="_blank">Клатч-багет замшевый шоколадный</a></li>
+    <li><a href="https://www.leman.in.ua/sumki/klatch-baget-zamshevii-shokoladnii-leman-lm4714-2.html" target="_blank">Клатч-багет замшевий шоколадний</a></li>
     <li><a href="https://www.leman.in.ua/sumki/ryukzaki/ryukzak-transformer-s-gladkoy-eko-kozhi-chyornyy-r2012-1.html" target="_blank">Рюкзак-трансформер гладкий чорний</a></li>
     <li><a href="https://www.sinsay.com/ua/uk/sumka-z-kosmetychkoiu-ta-znimnym-remintsem-563ek-80x" target="_blank">Сумка з косметичкою</a></li>
   </ul>
@@ -169,156 +169,59 @@
   <div id="lightbox" class="closezone"><img alt=""></div>
 
 <script>
-(function () {
+(function(){
   // ===== 1) Countdown to Jan 1, 2026 =====
   const cd = document.getElementById('ny-countdown');
-  function tick() {
+  function tick(){
     const target = new Date('2026-01-01T00:00:00');
     const now = new Date();
-    const s = Math.max(0, (target - now) / 1000 | 0);
-    const d = Math.floor(s / 86400),
-          h = Math.floor(s % 86400 / 3600),
-          m = Math.floor(s % 3600 / 60),
-          sec = s % 60;
-    if (cd) {
-      cd.textContent = `До Нового года: ${d}д ${String(h).padStart(2,'0')}ч ${String(m).padStart(2,'0')}м ${String(sec).padStart(2,'0')}с`;
-    }
+    const s = Math.max(0, (target - now)/1000|0);
+    const d = Math.floor(s/86400), h = Math.floor(s%86400/3600),
+          m = Math.floor(s%3600/60), sec = s%60;
+    if(cd) cd.textContent = `До Нового года: ${d}д ${String(h).padStart(2,'0')}ч ${String(m).padStart(2,'0')}м ${String(sec).padStart(2,'0')}с`;
   }
-  tick();
-  setInterval(tick, 1000);
+  tick(); setInterval(tick, 1000);
 
-  // ===== 2) Глобальный список "куплено" через сервер =====
-  const DATA_FILE  = 'wishlist.json';
-  const API_UPDATE = 'update_wishlist.php';
+  // ===== 2) Mark as bought (persist in localStorage) =====
+  const KEY='wishlist-bought-v1';
+  const saved = new Set(JSON.parse(localStorage.getItem(KEY)||'[]'));
 
-  const params  = new URLSearchParams(window.location.search);
-  const isAdmin = params.get('dmin') === '1';
-
-  let boughtSet     = new Set();
-  let adminChecked  = false;
-  let adminPassword = null;
-
-  const allLi = Array.from(document.querySelectorAll('ul li'));
-
-  // Стабильный id для каждого пункта
-  allLi.forEach((li, idx) => {
+  document.querySelectorAll('ul li').forEach((li, idx)=>{
     const id = (li.textContent.trim() + '::' + idx).toLowerCase();
-    li.dataset.itemId = id;
+    if(saved.has(id)) li.classList.add('bought');
+
+    const wrap = document.createElement('span');
+    wrap.className='item-actions';
+
+    const btnBuy = document.createElement('button');
+    btnBuy.className='btn-mini';
+    btnBuy.textContent = li.classList.contains('bought') ? 'Снять «куплено»' : 'Отметить «куплено»';
+    btnBuy.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      li.classList.toggle('bought');
+      if(li.classList.contains('bought')) saved.add(id); else saved.delete(id);
+      localStorage.setItem(KEY, JSON.stringify([...saved]));
+      btnBuy.textContent = li.classList.contains('bought') ? 'Снять «куплено»' : 'Отметить «куплено»';
+    });
+
+    wrap.appendChild(btnBuy);
+    li.appendChild(wrap);
   });
 
-  async function loadBought() {
-    try {
-      const res = await fetch(DATA_FILE + '?v=' + Date.now());
-      if (!res.ok) return;
-      const data = await res.json();
-      boughtSet = new Set(data.items || []);
-      applyBoughtClasses();
-      if (isAdmin) refreshButtonsLabels();
-    } catch (e) {
-      console.error('Не удалось загрузить wishlist.json', e);
-    }
-  }
-
-  function applyBoughtClasses() {
-    allLi.forEach(li => {
-      const id = li.dataset.itemId;
-      if (boughtSet.has(id)) {
-        li.classList.add('bought');
-      } else {
-        li.classList.remove('bought');
-      }
-    });
-  }
-
-  function refreshButtonsLabels() {
-    allLi.forEach(li => {
-      const btn = li.querySelector('.btn-mini');
-      if (!btn) return;
-      const id = li.dataset.itemId;
-      btn.textContent = boughtSet.has(id)
-        ? 'Снять «куплено»'
-        : 'Отметить «куплено»';
-    });
-  }
-
-  async function toggleBought(li) {
-    const id      = li.dataset.itemId;
-    const willBuy = !boughtSet.has(id);
-
-    if (!adminChecked) {
-      const pass = prompt('Введите админ-пароль, чтобы изменить статус «куплено»:');
-      if (!pass) return;
-      adminPassword = pass;
-      adminChecked  = true;
-    }
-
-    try {
-      const res = await fetch(API_UPDATE, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id,
-          buy: willBuy,
-          pass: adminPassword
-        })
-      });
-      const reply = await res.json();
-      if (!reply.ok) {
-        alert(reply.error || 'Ошибка при сохранении');
-        adminChecked  = false;
-        adminPassword = null;
-        return;
-      }
-      boughtSet = new Set(reply.items || []);
-      applyBoughtClasses();
-      refreshButtonsLabels();
-    } catch (e) {
-      console.error(e);
-      alert('Не удалось связаться с сервером');
-    }
-  }
-
-  // Кнопки показываем только в режиме ?dmin=1
-  if (isAdmin) {
-    allLi.forEach(li => {
-      const wrap = document.createElement('span');
-      wrap.className = 'item-actions';
-
-      const btnBuy = document.createElement('button');
-      btnBuy.className = 'btn-mini';
-      btnBuy.textContent = 'Отметить «куплено»';
-
-      btnBuy.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleBought(li);
-      });
-
-      wrap.appendChild(btnBuy);
-      li.appendChild(wrap);
-    });
-  }
-
-  // Загружаем текущее состояние для всех
-  loadBought();
-
-  // ===== 3) Лайтбокс для картинок =====
-  const lb    = document.getElementById('lightbox');
+  // ===== 3) Lightbox for images =====
+  const lb = document.getElementById('lightbox');
   const lbImg = lb.querySelector('img');
-  const open  = src => { lbImg.src = src; lb.style.display = 'flex'; };
-  const close = () => { lb.style.display = 'none'; lbImg.src = ''; };
+  const open = src => { lbImg.src = src; lb.style.display='flex'; };
+  const close = () => { lb.style.display='none'; lbImg.src=''; };
 
   document.querySelectorAll('.gadgets img, .books-and-more img, .bags img, .jewerly img, .pijams img, .shoes img, .clothes img, .cosmetics img, .other img')
-    .forEach(img => {
-      img.style.cursor = 'zoom-in';
-      img.addEventListener('click', () => open(img.src));
+    .forEach(img=>{
+      img.style.cursor='zoom-in';
+      img.addEventListener('click', ()=> open(img.src));
     });
 
-  lb.addEventListener('click', (e) => {
-    if (e.target.classList.contains('closezone')) close();
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') close();
-  });
+  lb.addEventListener('click', (e)=> { if(e.target.classList.contains('closezone')) close(); });
+  document.addEventListener('keydown', (e)=> { if(e.key==='Escape') close(); });
 })();
 </script>
 </body>
