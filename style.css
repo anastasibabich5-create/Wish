@@ -208,3 +208,74 @@ ul li {
         color: #58a6ff;
     }
 }
+
+/* ===== PURCHASED STATE ===== */
+.bought {
+    text-decoration: line-through;
+    color: #999 !important;
+    opacity: 0.6;
+}
+
+.bought a {
+    color: #888 !important;
+}
+
+/* ===== ADMIN BUTTONS ===== */
+.item-actions {
+    position: absolute;
+    right: 0;
+    top: 4px;
+}
+
+.btn-mini {
+    background: #0077cc;
+    color: white;
+    border: none;
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.btn-mini:hover {
+    background: #005fa3;
+}
+
+.bought .btn-mini {
+    background: #444;
+}
+
+/* Кнопки нормально видны в тёмной теме */
+@media (prefers-color-scheme: dark) {
+    .btn-mini {
+        background: #238636;
+    }
+    .btn-mini:hover {
+        background: #2ea043;
+    }
+}
+
+/* ===== LIGHTBOX ===== */
+#lightbox {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+#lightbox img {
+    max-width: 90%;
+    max-height: 90%;
+    border-radius: 12px;
+    box-shadow: 0 0 20px black;
+    animation: zoom 0.2s ease-out;
+}
+
+@keyframes zoom {
+    from { transform: scale(0.7); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+}
