@@ -124,7 +124,7 @@
     <li><a href="https://www.sinsay.com/ua/uk/kaptsi-zi-shtuchnym-khutrom-642gr-mlc" target="_blank">Капці зі штучним хутром</a></li>    
     <li><a href="https://lesox.com.ua/ru/zhenskie/getr/" target="_blank">Гетры молочные</a></li>  
     <li><a href="https://kasta.ua/uk/product/24769666:584/" target="_blank">Вафельний халат</a></li>
-    <li><a href="https://jysk.ua/vanna/khalati/khalat-nitta-s/m-mikrofibra-bilyy" target="_blank">Халат NITTA S/M мікрофібра</a></li> 
+    <li><a href="https://jysk.ua/vanna/khalati/khalat-nitta-s/m-mikrofibra-bilyy" target="_blank">Халат NITTA S/M мікрофібра</a></li>
     <li><a href="https://www.instagram.com/p/DRtq0yVjDOe?img_index=9" target="_blank">Боди</a></li> 
     <li><a href="https://www.instagram.com/p/DRzqngkAtE7" target="_blank">Светр (Шоколад)</a></li>
     </ul>
@@ -170,7 +170,19 @@
     </div>
   <div id="lightbox" class="closezone"><img alt=""></div>
 
-<script>
+<script type="module">
+/*
+  ✅ Синхронизация «Куплено» между всеми пользователями
+
+  Вариант 1 (рекомендуется): Supabase (Realtime + Postgres)
+  1) Создай проект Supabase
+  2) Вставь сюда SUPABASE_URL и SUPABASE_ANON_KEY
+  3) Выполни SQL ниже (в ответе я его тоже дам)
+
+  Если ключи не вставлены — сайт работает как раньше (localStorage, только на одном устройстве).
+*/
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
 (function(){
   // ===== 1) Countdown to Jan 1, 2026 =====
   const cd = document.getElementById('ny-countdown');
@@ -184,13 +196,51 @@
   }
   tick(); setInterval(tick, 1000);
 
-  // ===== 2) Mark as bought (persist in localStorage) =====
-  const KEY='wishlist-bought-v1';
-  const saved = new Set(JSON.parse(localStorage.getItem(KEY)||'[]'));
+  // ===== 2) Bought toggle — shared via Supabase (fallback: localStorage) =====
+  const SUPABASE_URL = "https://mprzuinvcnjbzalualcb.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1wcnp1aW52Y25qYnphbHVhbGNiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU3MjM1MzgsImV4cCI6MjA4MTI5OTUzOH0.1nWYNzxaFMelUXNJxsBPxNnQrUrWD8tYnH91GrcleCY";
+  const WISHLIST_ID = "babych-wishlist-v1"; // можно сменить на любое фиксированное имя для этого wishlist
 
-  document.querySelectorAll('ul li').forEach((li, idx)=>{
-    const id = (li.textContent.trim() + '::' + idx).toLowerCase();
-    if(saved.has(id)) li.classList.add('bought');
+  const hasSupabase = SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 30;
+  const supabase = hasSupabase ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+  // fallback localStorage key
+  const LS_KEY='wishlist-bought-v2';
+  const saved = new Set(JSON.parse(localStorage.getItem(LS_KEY)||'[]'));
+
+  const liById = new Map();
+
+  function norm(s){
+    return (s||"").trim().toLowerCase().replace(/\s+/g,' ');
+  }
+  function itemIdFromLi(li){
+    // Стабильный ID: сначала href первого <a>, иначе весь текст пункта
+    const a = li.querySelector('a');
+    const base = a?.getAttribute('href') ? `href:${a.getAttribute('href')}` : `txt:${li.childNodes[0]?.textContent || li.textContent}`;
+    // Убираем хвост кнопки "куплено"
+    const raw = norm(base);
+    // Простая короткая «хеш-подпись» (детерминированная)
+    let h = 0;
+    for (let i=0;i<raw.length;i++) h = (h*31 + raw.charCodeAt(i)) >>> 0;
+    return `it_${h.toString(16)}`;
+  }
+
+  function setBoughtUI(itemId, bought){
+    const li = liById.get(itemId);
+    if(!li) return;
+    li.classList.toggle('bought', !!bought);
+    const btn = li.querySelector('button.btn-mini');
+    if(btn) btn.textContent = li.classList.contains('bought') ? 'Снять «куплено»' : 'Отметить «куплено»';
+  }
+
+  // build UI + map
+  document.querySelectorAll('ul li').forEach((li)=>{
+    const itemId = itemIdFromLi(li);
+    li.dataset.itemId = itemId;
+    liById.set(itemId, li);
+
+    // apply fallback saved state
+    if(saved.has(itemId)) li.classList.add('bought');
 
     const wrap = document.createElement('span');
     wrap.className='item-actions';
@@ -198,17 +248,68 @@
     const btnBuy = document.createElement('button');
     btnBuy.className='btn-mini';
     btnBuy.textContent = li.classList.contains('bought') ? 'Снять «куплено»' : 'Отметить «куплено»';
-    btnBuy.addEventListener('click', (e)=>{
+
+    btnBuy.addEventListener('click', async (e)=>{
       e.stopPropagation();
-      li.classList.toggle('bought');
-      if(li.classList.contains('bought')) saved.add(id); else saved.delete(id);
-      localStorage.setItem(KEY, JSON.stringify([...saved]));
-      btnBuy.textContent = li.classList.contains('bought') ? 'Снять «куплено»' : 'Отметить «куплено»';
+
+      const next = !li.classList.contains('bought');
+      setBoughtUI(itemId, next);
+
+      // fallback localStorage always updates (чтобы работало и без Supabase)
+      if(next) saved.add(itemId); else saved.delete(itemId);
+      localStorage.setItem(LS_KEY, JSON.stringify([...saved]));
+
+      // supabase sync
+      if(hasSupabase){
+        const { error } = await supabase
+          .from('wishlist_items')
+          .upsert({ wishlist_id: WISHLIST_ID, item_id: itemId, bought: next, updated_at: new Date().toISOString() },
+                  { onConflict: 'wishlist_id,item_id' });
+        if(error){
+          console.warn('Supabase upsert error:', error);
+          // если не сохранилось — откатим только supabase не можем, но UI оставим, чтобы не бесить пользователя
+        }
+      }
     });
 
     wrap.appendChild(btnBuy);
     li.appendChild(wrap);
   });
+
+  async function loadFromSupabase(){
+    if(!hasSupabase) return;
+    const { data, error } = await supabase
+      .from('wishlist_items')
+      .select('item_id,bought')
+      .eq('wishlist_id', WISHLIST_ID);
+
+    if(error){
+      console.warn('Supabase load error:', error);
+      return;
+    }
+    (data||[]).forEach(row => setBoughtUI(row.item_id, row.bought));
+  }
+
+  function subscribeRealtime(){
+    if(!hasSupabase) return;
+    supabase
+      .channel(`wishlist:${WISHLIST_ID}`)
+      .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'wishlist_items',
+          filter: `wishlist_id=eq.${WISHLIST_ID}`,
+        }, (payload) => {
+          // payload.new содержит актуальное состояние строки
+          const row = payload.new;
+          if(row?.item_id) setBoughtUI(row.item_id, row.bought);
+        }
+      )
+      .subscribe();
+  }
+
+  loadFromSupabase();
+  subscribeRealtime();
 
   // ===== 3) Lightbox for images =====
   const lb = document.getElementById('lightbox');
