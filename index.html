@@ -176,7 +176,7 @@
   // =========================
   // 0) Supabase config (EDIT)
   // =========================
-  const SUPABASE_URL = "https://mprzuinvcnjbzalualcb.supabase.co";
+ const SUPABASE_URL = "https://mprzuinvcnjbzalualcb.supabase.co";
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1wcnp1aW52Y25qYnphbHVhbGNiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU3MjM1MzgsImV4cCI6MjA4MTI5OTUzOH0.1nWYNzxaFMelUXNJxsBPxNnQrUrWD8tYnH91GrcleCY";
   const WISHLIST_ID = "main"; // можно поменять, если нужно несколько списков
 
@@ -243,9 +243,9 @@
   function setBoughtUI(li, btn, bought){
     if(bought){
       li.classList.add('bought');
-      btn.textContent = 'Куплено';
-      btn.disabled = true; // "занято": нельзя снять отметку
-      btn.title = 'Этот товар уже отмечен как купленный';
+      btn.textContent = 'Снять «куплено»';
+      btn.disabled = false;
+      btn.title = 'Нажми, чтобы снять отметку';
     } else {
       li.classList.remove('bought');
       btn.textContent = 'Отметить «куплено»';
@@ -272,16 +272,16 @@
     return map;
   }
 
-  async function markBoughtInSupabase(itemId){
+  async function setBoughtInSupabase(itemId, bought){
     if(!supabaseEnabled) return { ok:false, reason:'supabase_not_configured' };
 
-    // upsert ensures row exists
+    // upsert ensures row exists and sets the desired state
     const { error } = await supabase
       .from('wishlist_items')
       .upsert({
         wishlist_id: WISHLIST_ID,
         item_id: itemId,
-        bought: true,
+        bought: !!bought,
         updated_at: new Date().toISOString()
       }, { onConflict: 'wishlist_id,item_id' });
 
@@ -302,21 +302,28 @@
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
 
+        const wasBought = li.classList.contains('bought');
+        const nextBought = !wasBought;
+
         // optimistic UI
-        setBoughtUI(li, btn, true);
+        setBoughtUI(li, btn, nextBought);
+        const prevText = btn.textContent;
         btn.textContent = 'Сохраняю…';
         btn.disabled = true;
 
-        const res = await markBoughtInSupabase(itemId);
+        const res = await setBoughtInSupabase(itemId, nextBought);
         if(!res.ok){
-          // rollback only if we couldn't save
-          setBoughtUI(li, btn, false);
+          // rollback if we couldn't save
+          setBoughtUI(li, btn, wasBought);
+          btn.disabled = false;
           alert('Не удалось сохранить в базе. Проверь Supabase URL/ANON KEY и политики таблицы.');
           return;
         }
 
-        setBoughtUI(li, btn, true);
+        // saved
+        setBoughtUI(li, btn, nextBought);
       });
+    });
     });
   })();
 
