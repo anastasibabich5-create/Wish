@@ -4,6 +4,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Babych AD</title>
     <link href="style.css" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <div id="ny-countdown" class="countdown"></div>
@@ -170,22 +171,8 @@
     </div>
   <div id="lightbox" class="closezone"><img alt=""></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 (function(){
-  // =========================
-  // 0) Supabase config (EDIT)
-  // =========================
- const SUPABASE_URL = "https://mprzuinvcnjbzalualcb.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1wcnp1aW52Y25qYnphbHVhbGNiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU3MjM1MzgsImV4cCI6MjA4MTI5OTUzOH0.1nWYNzxaFMelUXNJxsBPxNnQrUrWD8tYnH91GrcleCY";
-  const WISHLIST_ID = "main"; // можно поменять, если нужно несколько списков
-
-  const supabaseEnabled =
-    SUPABASE_URL && SUPABASE_ANON_KEY &&
-    !SUPABASE_URL.includes("PASTE_") && !SUPABASE_ANON_KEY.includes("PASTE_");
-
-  const supabase = supabaseEnabled ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-
   // ===== 1) Countdown to Jan 1, 2026 =====
   const cd = document.getElementById('ny-countdown');
   function tick(){
@@ -198,134 +185,120 @@
   }
   tick(); setInterval(tick, 1000);
 
-  // ==============================
-  // 2) "Куплено" — общее для всех
-  // ==============================
-  const liNodes = Array.from(document.querySelectorAll('ul li'));
+  // ===== 2) Mark as bought (shared via Supabase; fallback to localStorage) =====
+  const KEY='wishlist-bought-v1';
 
-  function getSectionId(li){
-    const wrap = li.closest('div');
-    const h = wrap ? wrap.querySelector('h4[id]') : null;
-    return (h && h.id) ? h.id : (wrap ? (wrap.className || 'section') : 'section');
+  // 1) Configure Supabase (fill these two values). If left empty -> fallback to localStorage only.
+const SUPABASE_URL = "https://mprzuinvcnjbzalualcb.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1wcnp1aW52Y25qYnphbHVhbGNiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU3MjM1MzgsImV4cCI6MjA4MTI5OTUzOH0.1nWYNzxaFMelUXNJxsBPxNnQrUrWD8tYnH91GrcleCY";
+  const WISHLIST_ID = (location.host + location.pathname).toLowerCase();
+
+  const hasSupabase = SUPABASE_URL.startsWith('http') && SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes('PASTE_');
+  const supabase = hasSupabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+  // Local fallback store
+  const saved = new Set(JSON.parse(localStorage.getItem(KEY)||'[]'));
+
+  function makeItemId(li, idx){
+    // stable enough as long as list order/text stays the same
+    return (li.childNodes[0]?.textContent?.trim() || li.textContent.trim() || ('item-'+idx)) + '::' + idx;
   }
 
-  function getItemKey(li){
-    const a = li.querySelector('a[href]');
-    const title = (a ? a.textContent : li.firstChild?.textContent || li.textContent).trim();
-    const href = a ? a.getAttribute('href') : '';
-    const section = getSectionId(li);
-    return `${section}::${(href || title)}`.toLowerCase();
-  }
-
-  function ensureButton(li){
-    const wrap = document.createElement('span');
-    wrap.className = 'item-actions';
-
-    const btnBuy = document.createElement('button');
-    btnBuy.className = 'btn-mini';
-    btnBuy.type = 'button';
-    btnBuy.textContent = 'Отметить «куплено»';
-
-    wrap.appendChild(btnBuy);
-    li.appendChild(wrap);
-
-    return btnBuy;
-  }
-
-  // Attach buttons + keys
-  const items = liNodes.map((li) => {
-    const itemId = getItemKey(li);
-    li.dataset.itemId = itemId;
-    const btn = ensureButton(li);
-    return { li, btn, itemId };
-  });
-
-  function setBoughtUI(li, btn, bought){
-    if(bought){
-      li.classList.add('bought');
-      btn.textContent = 'Снять «куплено»';
-      btn.disabled = false;
-      btn.title = 'Нажми, чтобы снять отметку';
-    } else {
-      li.classList.remove('bought');
-      btn.textContent = 'Отметить «куплено»';
-      btn.disabled = false;
-      btn.title = '';
+  function ensureBadge(li){
+    let badge = li.querySelector('.status-badge');
+    if(!badge){
+      badge = document.createElement('span');
+      badge.className = 'status-badge';
+      badge.setAttribute('aria-hidden','true');
+      li.insertBefore(badge, li.querySelector('.item-actions') || null);
     }
+    return badge;
   }
 
-  async function loadBoughtFromSupabase(){
-    if(!supabaseEnabled) return new Map();
+  function applyBoughtUI(li, btn, bought){
+    li.classList.toggle('bought', bought);
+    btn.textContent = bought ? 'Снять «куплено»' : 'Отметить «куплено»';
+    const badge = ensureBadge(li);
+    badge.textContent = bought ? 'Куплено' : '';
+  }
 
+  async function loadBoughtFromSupabase(map){
+    // map: item_id -> {li, btn}
     const { data, error } = await supabase
       .from('wishlist_items')
       .select('item_id,bought')
       .eq('wishlist_id', WISHLIST_ID);
 
     if(error){
-      console.warn('Supabase select error:', error);
-      return new Map();
+      console.error('Supabase select error:', error);
+      return;
     }
 
-    const map = new Map();
-    (data || []).forEach(r => map.set(String(r.item_id), !!r.bought));
-    return map;
+    for(const row of (data||[])){
+      const rec = map.get(row.item_id);
+      if(rec) applyBoughtUI(rec.li, rec.btn, !!row.bought);
+    }
   }
 
-  async function setBoughtInSupabase(itemId, bought){
-    if(!supabaseEnabled) return { ok:false, reason:'supabase_not_configured' };
+  async function toggleBoughtSupabase(itemId, li, btn){
+    const next = !li.classList.contains('bought');
 
-    // upsert ensures row exists and sets the desired state
     const { error } = await supabase
       .from('wishlist_items')
-      .upsert({
-        wishlist_id: WISHLIST_ID,
-        item_id: itemId,
-        bought: !!bought,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'wishlist_id,item_id' });
+      .upsert({ wishlist_id: WISHLIST_ID, item_id: itemId, bought: next });
 
     if(error){
-      console.warn('Supabase upsert error:', error);
-      return { ok:false, reason:'supabase_error', error };
+      console.error('Supabase upsert error:', error);
+      return;
     }
-    return { ok:true };
+
+    applyBoughtUI(li, btn, next);
   }
 
-  (async function initBought(){
-    // 2.1 Apply DB state
-    const boughtMap = await loadBoughtFromSupabase();
-    items.forEach(({li, btn, itemId}) => setBoughtUI(li, btn, boughtMap.get(itemId) === true));
+  document.querySelectorAll('ul li').forEach((li, idx)=>{
+    const itemId = makeItemId(li, idx).toLowerCase();
 
-    // 2.2 Click handlers
-    items.forEach(({li, btn, itemId}) => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
+    // Initial state (fallback local)
+    if(saved.has(itemId)) li.classList.add('bought');
 
-        const wasBought = li.classList.contains('bought');
-        const nextBought = !wasBought;
+    const wrap = document.createElement('span');
+    wrap.className='item-actions';
 
-        // optimistic UI
-        setBoughtUI(li, btn, nextBought);
-        const prevText = btn.textContent;
-        btn.textContent = 'Сохраняю…';
-        btn.disabled = true;
+    const btnBuy = document.createElement('button');
+    btnBuy.className='btn-mini';
 
-        const res = await setBoughtInSupabase(itemId, nextBought);
-        if(!res.ok){
-          // rollback if we couldn't save
-          setBoughtUI(li, btn, wasBought);
-          btn.disabled = false;
-          alert('Не удалось сохранить в базе. Проверь Supabase URL/ANON KEY и политики таблицы.');
-          return;
-        }
+    // Apply initial UI
+    applyBoughtUI(li, btnBuy, li.classList.contains('bought'));
 
-        // saved
-        setBoughtUI(li, btn, nextBought);
-      });
+    btnBuy.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+
+      if(supabase){
+        await toggleBoughtSupabase(itemId, li, btnBuy);
+      } else {
+        // fallback local toggle
+        const next = !li.classList.contains('bought');
+        applyBoughtUI(li, btnBuy, next);
+        if(next) saved.add(itemId); else saved.delete(itemId);
+        localStorage.setItem(KEY, JSON.stringify([...saved]));
+      }
     });
-    });
-  })();
+
+    wrap.appendChild(btnBuy);
+    li.appendChild(wrap);
+
+    // ensure badge exists (even empty) so it's consistent
+    ensureBadge(li);
+
+    // store mapping for supabase load
+    if(!window.__wishlistMap) window.__wishlistMap = new Map();
+    window.__wishlistMap.set(itemId, { li, btn: btnBuy });
+  });
+
+  // If Supabase configured -> load shared statuses once on page load
+  if(supabase && window.__wishlistMap){
+    loadBoughtFromSupabase(window.__wishlistMap);
+  }
 
   // ===== 3) Lightbox for images =====
   const lb = document.getElementById('lightbox');
