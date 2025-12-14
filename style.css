@@ -252,3 +252,27 @@ li.bought::before{ content:"✔"; color:#22c55e; transform:none; }
   box-shadow:0 20px 50px rgba(0,0,0,.45);
 }
 #lightbox.closezone{ cursor:zoom-out; }
+
+/* Shared bought marker */
+.status-badge{
+  margin-left:auto;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .2px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  color: color-mix(in srgb, var(--text) 90%, white);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  opacity: 0;
+  transform: translateY(-1px);
+  transition: .2s ease;
+}
+
+li.bought .status-badge{
+  opacity: 1;
+}
+
+li.bought{
+  opacity: .75;
+}
