@@ -7,7 +7,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-    <div id="ny-countdown" class="countdown"></div>
         <div class="menu">
         <nav>
             <a href="#Gadget">Гаджеты</a><br>
@@ -164,17 +163,6 @@
 
 <script>
 (function(){
-  // ===== 1) Countdown to Jan 1, 2026 =====
-  const cd = document.getElementById('ny-countdown');
-  function tick(){
-    const target = new Date('2026-01-01T00:00:00');
-    const now = new Date();
-    const s = Math.max(0, (target - now)/1000|0);
-    const d = Math.floor(s/86400), h = Math.floor(s%86400/3600),
-          m = Math.floor(s%3600/60), sec = s%60;
-    if(cd) cd.textContent = `До Нового года: ${d}д ${String(h).padStart(2,'0')}ч ${String(m).padStart(2,'0')}м ${String(sec).padStart(2,'0')}с`;
-  }
-  tick(); setInterval(tick, 1000);
 
   // ===== 2) Mark as bought (shared via Supabase; fallback to localStorage) =====
   const KEY='wishlist-bought-v1';
