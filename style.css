@@ -67,7 +67,7 @@ body {
   text-decoration: underline;
   transform: translateY(-2px);
 }
-menu a:visited {
+.menu a:visited {
   color: rgb(0, 0, 0);
 }   
 
