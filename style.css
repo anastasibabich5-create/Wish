@@ -214,6 +214,8 @@ li {
   border: 1px solid rgba(255, 153, 180, .26);
   box-shadow: 0 14px 30px rgba(255, 111, 153, .12);
   transition: .22s ease;
+  overflow:hidden;
+  padding:14px;
 }
 
 li:hover {
