@@ -162,146 +162,152 @@
   <div id="lightbox" class="closezone"><img alt=""></div>
 
 <script>
-(function(){
-
-  // ===== 2) Mark as bought (shared via Supabase; fallback to localStorage) =====
-  const KEY='wishlist-bought-v1';
-
-  // 1) Configure Supabase (fill these two values). If left empty -> fallback to localStorage only.
-const SUPABASE_URL = "https://jhdzsbliitxdzgdktpnn.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpoZHpzYmxpaXR4ZHpnZGt0cG5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0OTY3ODcsImV4cCI6MjA5NTA3Mjc4N30.5bbCWGLoGgCfdMjv0RVyH80inKEshZs2ztJulv5HVAU";
+(function () {
+  const SUPABASE_URL = "https://jhdzsbliitxdzgdktpnn.supabase.co";
+  const SUPABASE_ANON_KEY = "ТВОЙ_ANON_KEY";
   const WISHLIST_ID = (location.host + location.pathname).toLowerCase();
 
-  const hasSupabase = SUPABASE_URL.startsWith('http') && SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes('PASTE_');
-  const supabase = hasSupabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const itemMap = new Map();
 
-  // Local fallback store
-  const saved = new Set(JSON.parse(localStorage.getItem(KEY)||'[]'));
-
-  function makeItemId(li, idx){
-    // stable enough as long as list order/text stays the same
-    return (li.childNodes[0]?.textContent?.trim() || li.textContent.trim() || ('item-'+idx)) + '::' + idx;
+  function makeItemId(li, idx) {
+    const link = li.querySelector("a");
+    const text = link ? link.textContent.trim() : li.textContent.trim();
+    return (text + "::" + idx).toLowerCase();
   }
 
-  function ensureBadge(li){
-    let badge = li.querySelector('.status-badge');
-    if(!badge){
-      badge = document.createElement('span');
-      badge.className = 'status-badge';
-      badge.setAttribute('aria-hidden','true');
-      li.insertBefore(badge, li.querySelector('.item-actions') || null);
+  function ensureBadge(li) {
+    let badge = li.querySelector(".status-badge");
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.className = "status-badge";
+      li.insertBefore(badge, li.querySelector(".item-actions") || null);
     }
     return badge;
   }
 
-  function applyBoughtUI(li, btn, bought){
-    li.classList.toggle('bought', bought);
-    btn.textContent = bought ? 'Снять «куплено»' : 'Отметить «куплено»';
-    const badge = ensureBadge(li);
-    badge.textContent = bought ? 'Куплено' : '';
+  function applyBoughtUI(li, btn, bought) {
+    li.classList.toggle("bought", bought);
+    btn.textContent = bought ? "Снять «куплено»" : "Отметить «куплено»";
+    ensureBadge(li).textContent = bought ? "Куплено" : "";
   }
 
-  async function loadBoughtFromSupabase(map){
-    // map: item_id -> {li, btn}
+  async function loadStatuses() {
     const { data, error } = await supabase
-      .from('wishlist_items')
-      .select('item_id,bought')
-      .eq('wishlist_id', WISHLIST_ID);
+      .from("wishlist_items")
+      .select("item_id,bought")
+      .eq("wishlist_id", WISHLIST_ID);
 
-    if(error){
-      console.error('Supabase select error:', error);
+    if (error) {
+      console.error("Load error:", error);
       return;
     }
 
-    for(const row of (data||[])){
-      const rec = map.get(row.item_id);
-      if(rec) applyBoughtUI(rec.li, rec.btn, !!row.bought);
-    }
+    data.forEach(row => {
+      const item = itemMap.get(row.item_id);
+      if (item) applyBoughtUI(item.li, item.btn, row.bought);
+    });
   }
 
-  async function toggleBoughtSupabase(itemId, li, btn){
-    const next = !li.classList.contains('bought');
-
-const { error } = await supabase
-  .from('wishlist_items')
-  .upsert(
-    {
-      wishlist_id: WISHLIST_ID,
-      item_id: itemId,
-      bought: next
-    },
-    {
-      onConflict: 'wishlist_id,item_id'
-    }
-  );
-
-    if(error){
-      console.error('Supabase upsert error:', error);
-      return;
-    }
+  async function toggleBought(itemId, li, btn) {
+    const next = !li.classList.contains("bought");
 
     applyBoughtUI(li, btn, next);
+
+    const { error } = await supabase
+      .from("wishlist_items")
+      .upsert(
+        {
+          wishlist_id: WISHLIST_ID,
+          item_id: itemId,
+          bought: next,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: "wishlist_id,item_id" }
+      );
+
+    if (error) {
+      console.error("Save error:", error);
+      applyBoughtUI(li, btn, !next);
+    }
   }
 
-  document.querySelectorAll('ul li').forEach((li, idx)=>{
-    const itemId = makeItemId(li, idx).toLowerCase();
+  document.querySelectorAll("ul li").forEach((li, idx) => {
+    const itemId = makeItemId(li, idx);
 
-    // Initial state (fallback local)
-    if(saved.has(itemId)) li.classList.add('bought');
+    const wrap = document.createElement("span");
+    wrap.className = "item-actions";
 
-    const wrap = document.createElement('span');
-    wrap.className='item-actions';
+    const btn = document.createElement("button");
+    btn.className = "btn-mini";
+    btn.type = "button";
 
-    const btnBuy = document.createElement('button');
-    btnBuy.className='btn-mini';
+    applyBoughtUI(li, btn, false);
 
-    // Apply initial UI
-    applyBoughtUI(li, btnBuy, li.classList.contains('bought'));
-
-    btnBuy.addEventListener('click', async (e)=>{
+    btn.addEventListener("click", function (e) {
+      e.preventDefault();
       e.stopPropagation();
-
-      if(supabase){
-        await toggleBoughtSupabase(itemId, li, btnBuy);
-      } else {
-        // fallback local toggle
-        const next = !li.classList.contains('bought');
-        applyBoughtUI(li, btnBuy, next);
-        if(next) saved.add(itemId); else saved.delete(itemId);
-        localStorage.setItem(KEY, JSON.stringify([...saved]));
-      }
+      toggleBought(itemId, li, btn);
     });
 
-    wrap.appendChild(btnBuy);
+    wrap.appendChild(btn);
     li.appendChild(wrap);
-
-    // ensure badge exists (even empty) so it's consistent
     ensureBadge(li);
 
-    // store mapping for supabase load
-    if(!window.__wishlistMap) window.__wishlistMap = new Map();
-    window.__wishlistMap.set(itemId, { li, btn: btnBuy });
+    itemMap.set(itemId, { li, btn });
   });
 
-  // If Supabase configured -> load shared statuses once on page load
-  if(supabase && window.__wishlistMap){
-    loadBoughtFromSupabase(window.__wishlistMap);
+  loadStatuses();
+
+  supabase
+    .channel("wishlist_items_realtime")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "wishlist_items",
+        filter: "wishlist_id=eq." + WISHLIST_ID
+      },
+      payload => {
+        const row = payload.new;
+        if (!row) return;
+
+        const item = itemMap.get(row.item_id);
+        if (item) {
+          applyBoughtUI(item.li, item.btn, row.bought);
+        }
+      }
+    )
+    .subscribe();
+
+  const lb = document.getElementById("lightbox");
+  const lbImg = lb.querySelector("img");
+
+  function open(src) {
+    lbImg.src = src;
+    lb.style.display = "flex";
   }
 
-  // ===== 3) Lightbox for images =====
-  const lb = document.getElementById('lightbox');
-  const lbImg = lb.querySelector('img');
-  const open = src => { lbImg.src = src; lb.style.display='flex'; };
-  const close = () => { lb.style.display='none'; lbImg.src=''; };
+  function close() {
+    lb.style.display = "none";
+    lbImg.src = "";
+  }
 
-  document.querySelectorAll('.gadgets img, .books-and-more img, .bags img, .jewerly img, .pijams img, .shoes img, .clothes img, .cosmetics img, .other img')
-    .forEach(img=>{
-      img.style.cursor='zoom-in';
-      img.addEventListener('click', ()=> open(img.src));
+  document
+    .querySelectorAll(".gadgets img, .books-and-more img, .bags img, .jewerly img, .pijams img, .shoes img, .clothes img, .cosmetics img, .other img")
+    .forEach(img => {
+      img.style.cursor = "zoom-in";
+      img.addEventListener("click", () => open(img.src));
     });
 
-  lb.addEventListener('click', (e)=> { if(e.target.classList.contains('closezone')) close(); });
-  document.addEventListener('keydown', (e)=> { if(e.key==='Escape') close(); });
+  lb.addEventListener("click", e => {
+    if (e.target.classList.contains("closezone")) close();
+  });
+
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") close();
+  });
 })();
 </script>
 </body>
