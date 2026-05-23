@@ -1,14 +1,14 @@
 /* ===== Новогодний Wishlist — Babych AD ===== */
 :root {
-  --bg: #f6f9ff;
+  --bg: #fffdf7;
   --panel: #ffffff;
-  --text: #1b1c1e;
-  --muted: #667085;
-  --accent: #c84cff;
-  --accent2: #00c9ff;
-  --radius: 16px;
-  --shadow: 0 10px 25px rgba(0,0,0,.08);
-  --border: 1px solid rgba(0,0,0,.06);
+  --text: #4b3b32;
+  --muted: #8d7b70;
+  --accent: #ff8fb1;
+  --accent2: #ffd166;
+  --radius: 18px;
+  --shadow: 0 8px 24px rgba(255, 182, 193, 0.18);
+  --border: 1px solid rgba(255, 182, 193, 0.18);
 }
 
 @media (prefers-color-scheme: dark){
@@ -29,8 +29,9 @@ body {
   color: var(--text);
   background: var(--bg);
   background-image:
-    radial-gradient(circle at top left, rgba(200,76,255,.12), transparent 70%),
-    radial-gradient(circle at bottom right, rgba(0,201,255,.1), transparent 70%);
+  radial-gradient(circle at top left, rgba(255,182,193,.35), transparent 45%),
+  radial-gradient(circle at top right, rgba(255,240,180,.45), transparent 40%),
+  radial-gradient(circle at bottom right, rgba(255,210,230,.3), transparent 45%);
   line-height: 1.6;
 }
 
@@ -162,8 +163,8 @@ li {
   transition: .2s ease;
 }
 li:hover {
-  background: linear-gradient(90deg, var(--accent), var(--accent2));
-  color: white;
+  background: linear-gradient(90deg, #ffb7cf, #ffe29a);
+  color: #4b3b32;
   transform: translateY(-2px);
 }
 
