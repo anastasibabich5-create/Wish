@@ -222,9 +222,18 @@ const SUPABASE_URL = "https://jhdzsbliitxdzgdktpnn.supabase.co/rest/v1/";
   async function toggleBoughtSupabase(itemId, li, btn){
     const next = !li.classList.contains('bought');
 
-    const { error } = await supabase
-      .from('wishlist_items')
-      .upsert({ wishlist_id: WISHLIST_ID, item_id: itemId, bought: next });
+const { error } = await supabase
+  .from('wishlist_items')
+  .upsert(
+    {
+      wishlist_id: WISHLIST_ID,
+      item_id: itemId,
+      bought: next
+    },
+    {
+      onConflict: 'wishlist_id,item_id'
+    }
+  );
 
     if(error){
       console.error('Supabase upsert error:', error);
